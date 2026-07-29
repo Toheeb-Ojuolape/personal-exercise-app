@@ -31,6 +31,11 @@ need the network).
   protein/fat/carb splits. Metric or imperial. Export or wipe your data.
 - **Light and dark mode** — follows your system by default, with a manual
   toggle that sticks.
+- **Colour themes** — six presets (Violet, Ocean, Sunset, Forest, Crimson,
+  Slate) plus a custom option where you pick a primary and secondary colour.
+  The theme drives the brand colour, the brand gradient, and all four workout
+  accents; changes apply live. Success green and error red stay fixed so
+  meaning never shifts.
 - **Installable** — add to home screen for a standalone, full-screen app.
 - **Motion** — directional screen transitions (slide in when you open a
   workout, slide back when you leave, cross-fade between tabs), a tab bar with
@@ -68,6 +73,7 @@ blank, set the publish directory to `.`. `netlify.toml` already covers this.
 | `index.html` | App shell — app bar, screen container, tab bar, sheet host |
 | `style.css` | Design tokens, both themes, and every component |
 | `workouts.js` | The 4-day program and nutrition tips — **edit this to customise** |
+| `palette.js` | Colour presets, HSL maths for custom themes, CSS-var application |
 | `profile.js` | Profile storage, unit conversion, BMR/TDEE/macro math |
 | `icons.js` | Inline SVG icon set |
 | `app.js` | Router, screens, sheets, rest timer |
@@ -90,6 +96,11 @@ are selected.
 
 **The targets** — `nutritionTargets()` in `profile.js` uses a 450 kcal deficit,
 1.8 g/kg protein, and 25% of calories from fat. Adjust to taste.
+
+**The colours** — add an entry to `PALETTES` in `palette.js`. Each preset needs
+a `brandDark`/`brandLight` pair (light mode needs a darker brand for contrast),
+a 2- or 3-stop `grad`, and four `days` accents. Everything is applied as CSS
+custom properties on `:root`, so components stay palette-agnostic.
 
 ## Exercise videos
 

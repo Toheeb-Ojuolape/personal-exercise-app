@@ -141,6 +141,7 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const meta = document.getElementById("themeColorMeta");
   if (meta) meta.setAttribute("content", theme === "light" ? "#F4F4F8" : "#08080C");
+  applyPalette(); // --brand differs per theme, so re-resolve it
 }
 function toggleTheme() {
   const next = activeTheme() === "light" ? "dark" : "light";
@@ -156,6 +157,10 @@ const esc = (s) =>
   );
 
 const todaysDayId = () => schedule()[new Date().getDay()] || null;
+
+/** Per-workout accent, themed via CSS vars with the data file as fallback. */
+const dayColor = (day) =>
+  `var(--day-${WORKOUTS.findIndex((w) => w.id === day.id) + 1}, ${day.accent})`;
 
 function relDate(iso) {
   const d = new Date(iso);
@@ -364,7 +369,7 @@ function screenPlan() {
         const done = didDayThisWeek(d.id);
         return `
           <button class="row" data-open-day="${d.id}">
-            <div class="row-badge" style="background:${d.accent}" title="${esc(d.short)}">${icon(d.iconName, 23)}</div>
+            <div class="row-badge" style="background:${dayColor(d)}" title="${esc(d.short)}">${icon(d.iconName, 23)}</div>
             <div class="row-body">
               <div class="row-title">${esc(d.title)}</div>
               <div class="row-sub">${esc(d.focus)} · ${d.exercises.length} exercises</div>
@@ -379,7 +384,7 @@ function screenPlan() {
     <div class="section-head"><h3>Guides</h3></div>
     <div class="card rows">
       <button class="row" data-open-nutrition>
-        <div class="row-badge" style="background:linear-gradient(135deg,#FFB020,#FF6B4D)">${icon("fire", 20)}</div>
+        <div class="row-badge" style="background:linear-gradient(135deg,var(--day-2,#FFB020),var(--day-1,#FF6B4D))">${icon("fire", 20)}</div>
         <div class="row-body">
           <div class="row-title">Nutrition basics</div>
           <div class="row-sub">Eat to lose fat without losing muscle</div>
@@ -391,7 +396,7 @@ function screenPlan() {
     <div class="section-head"><h3>Schedule</h3></div>
     <div class="card rows">
       <button class="row" data-open-schedule>
-        <div class="row-badge" style="background:linear-gradient(135deg,#2E9BFF,#00D49A)">${icon("timer", 20)}</div>
+        <div class="row-badge" style="background:linear-gradient(135deg,var(--day-3,#2E9BFF),var(--day-4,#00D49A))">${icon("timer", 20)}</div>
         <div class="row-body">
           <div class="row-title">Training days</div>
           <div class="row-sub">${trainingDays().map((d) => DOW_SHORT[d]).join(" · ")}</div>
@@ -511,7 +516,7 @@ function screenProgress() {
             const day = WORKOUTS.find((d) => d.id === s.dayId);
             return `
               <div class="log-row">
-                <div class="row-badge" style="background:${day?.accent || "var(--brand)"};width:34px;height:34px;border-radius:11px" title="${esc(day?.short || "")}">${day ? icon(day.iconName, 19) : "—"}</div>
+                <div class="row-badge" style="background:${day ? dayColor(day) : "var(--brand)"};width:34px;height:34px;border-radius:11px" title="${esc(day?.short || "")}">${day ? icon(day.iconName, 19) : "—"}</div>
                 <span class="log-date">${esc(day?.title || s.title)}</span>
                 <span class="log-val" style="color:var(--text-2);font-weight:550">${relDate(s.date)}</span>
               </div>`;
@@ -639,6 +644,17 @@ function screenProfile() {
           <button data-theme-set="dark" class="${activeTheme() === "dark" ? "on" : ""}">Dark</button>
         </div>
       </div>
+    </div>
+
+    <div class="card rows" style="margin-top:12px">
+      <button class="row" data-open-palette>
+        <span class="pal-dot" style="background:var(--grad-brand)"></span>
+        <div class="row-body">
+          <div class="row-title">Colour theme</div>
+          <div class="row-sub">${esc(resolvePalette().name)}</div>
+        </div>
+        <span class="chev">${icon("chevron", 18)}</span>
+      </button>
     </div>
 
     <div class="section-head"><h3>Data</h3></div>
@@ -822,7 +838,7 @@ function openScheduleSheet() {
         return `
           <div class="assign-row">
             <span class="assign-day">${DOW_SHORT[dow]}</span>
-            <span class="assign-badge" style="background:${w.accent}" title="${esc(w.short)}">${icon(w.iconName, 18)}</span>
+            <span class="assign-badge" style="background:${dayColor(w)}" title="${esc(w.short)}">${icon(w.iconName, 18)}</span>
             <span class="assign-name">${esc(w.title)}</span>
           </div>`;
       })
@@ -867,6 +883,112 @@ function openScheduleSheet() {
         if (!picked.size) return;
         saveProfile({ trainingDays: [...picked].sort((a, b) => weekOrder(a) - weekOrder(b)) });
         closeSheet();
+        render();
+      });
+    }
+  );
+}
+
+function openPaletteSheet() {
+  const swatch = (p) => `
+    <button class="pal-card${getPaletteChoice().id === p.id ? " on" : ""}" data-pal="${p.id}"
+            aria-label="${p.name} theme" aria-pressed="${getPaletteChoice().id === p.id}">
+      <span class="pal-swatch" style="background:${gradientCss(p.grad)}">
+        <span class="pal-check">${icon("check", 15)}</span>
+      </span>
+      <span class="pal-dots">
+        ${p.days.map((c) => `<i style="background:${c}"></i>`).join("")}
+      </span>
+      <span class="pal-name">${p.name}</span>
+    </button>`;
+
+  const choice = getPaletteChoice();
+  const custom = {
+    primary: choice.primary || DEFAULT_CUSTOM.primary,
+    secondary: choice.secondary || DEFAULT_CUSTOM.secondary,
+  };
+
+  openSheet(
+    `
+    <h3>Colour theme</h3>
+    <p class="sheet-sub">Changes apply straight away, so you can see them behind this sheet.</p>
+
+    <div class="pal-grid" id="palGrid">${PALETTES.map(swatch).join("")}</div>
+
+    <div class="section-head" style="margin:22px 2px 10px"><h3>Make your own</h3></div>
+    <div class="card card-pad">
+      <div class="pal-custom">
+        <label class="pal-pick">
+          <input type="color" class="color-input" id="palPrimary" value="${custom.primary}" />
+          <span>Primary</span>
+        </label>
+        <span class="pal-arrow">${icon("chevron", 16)}</span>
+        <label class="pal-pick">
+          <input type="color" class="color-input" id="palSecondary" value="${custom.secondary}" />
+          <span>Secondary</span>
+        </label>
+      </div>
+      <div class="pal-preview" id="palPreview"></div>
+      <button class="btn${choice.id === "custom" ? " success" : ""}" id="palApply" style="margin-top:14px">
+        ${choice.id === "custom" ? "✓ Using your colours" : "Use these colours"}
+      </button>
+    </div>
+
+    <div class="btn-row"><button class="btn secondary" data-sheet-close>Done</button></div>
+    `,
+    (sheet) => {
+      const primary = sheet.querySelector("#palPrimary");
+      const secondary = sheet.querySelector("#palSecondary");
+      const applyBtn = sheet.querySelector("#palApply");
+      const preview = sheet.querySelector("#palPreview");
+
+      const paintPreview = () => {
+        const p = customPalette(primary.value, secondary.value);
+        preview.innerHTML = `
+          <span class="pal-bar" style="background:${gradientCss(p.grad)}"></span>
+          <span class="pal-dots">${p.days.map((c) => `<i style="background:${c}"></i>`).join("")}</span>`;
+      };
+
+      const markSelected = () => {
+        const id = getPaletteChoice().id;
+        sheet.querySelectorAll("[data-pal]").forEach((b) => {
+          const on = b.dataset.pal === id;
+          b.classList.toggle("on", on);
+          b.setAttribute("aria-pressed", String(on));
+        });
+        applyBtn.classList.toggle("success", id === "custom");
+        applyBtn.textContent = id === "custom" ? "✓ Using your colours" : "Use these colours";
+      };
+
+      paintPreview();
+
+      sheet.querySelectorAll("[data-pal]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          savePaletteChoice({ id: btn.dataset.pal, ...custom });
+          applyPalette();
+          markSelected();
+          render(); // refresh the screen behind the sheet
+          navigator.vibrate?.(8);
+        })
+      );
+
+      [primary, secondary].forEach((inp) =>
+        inp.addEventListener("input", () => {
+          custom.primary = primary.value;
+          custom.secondary = secondary.value;
+          paintPreview();
+          if (getPaletteChoice().id === "custom") {
+            savePaletteChoice({ id: "custom", ...custom });
+            applyPalette();
+            render();
+          }
+        })
+      );
+
+      applyBtn.addEventListener("click", () => {
+        savePaletteChoice({ id: "custom", primary: primary.value, secondary: secondary.value });
+        applyPalette();
+        markSelected();
         render();
       });
     }
@@ -1038,6 +1160,10 @@ function bindScreen(view) {
     el.addEventListener("click", openScheduleSheet)
   );
 
+  view.querySelectorAll("[data-open-palette]").forEach((el) =>
+    el.addEventListener("click", openPaletteSheet)
+  );
+
   // Videos load only when opened, so the day list stays light.
   view.querySelectorAll("[data-play]").forEach((el) =>
     el.addEventListener("click", () => openVideoSheet(route.dayId, Number(el.dataset.play)))
@@ -1090,7 +1216,7 @@ function bindScreen(view) {
 
   view.querySelector("#exportBtn")?.addEventListener("click", () => {
     const blob = new Blob(
-      [JSON.stringify({ profile: getProfile(), sessions: getSessions(), weights: getWeights(), ticks: getTicks() }, null, 2)],
+      [JSON.stringify({ profile: getProfile(), palette: getPaletteChoice(), sessions: getSessions(), weights: getWeights(), ticks: getTicks() }, null, 2)],
       { type: "application/json" }
     );
     const url = URL.createObjectURL(blob);
@@ -1111,7 +1237,8 @@ function bindScreen(view) {
       `,
       (sheet) =>
         sheet.querySelector("#confirmReset").addEventListener("click", () => {
-          [K_SESSIONS, K_WEIGHTS, K_TICKS, PROFILE_KEY].forEach((k) => localStorage.removeItem(k));
+          [K_SESSIONS, K_WEIGHTS, K_TICKS, PROFILE_KEY, PALETTE_KEY].forEach((k) => localStorage.removeItem(k));
+          applyPalette();
           closeSheet();
           route = { tab: "today", dayId: null };
           render();

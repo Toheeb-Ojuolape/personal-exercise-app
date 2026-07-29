@@ -198,7 +198,7 @@ a { color: inherit; }
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 2px 8px -2px rgba(124, 77, 255, 0.8);
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--brand) 78%, transparent);
   transition: transform 0.14s var(--tap);
 }
 .appbar-avatar:active { transform: scale(0.88); }
@@ -404,7 +404,7 @@ a { color: inherit; }
   overflow: hidden;
   color: #fff;
   background: var(--grad-brand);
-  box-shadow: 0 12px 34px -12px rgba(124, 77, 255, 0.7);
+  box-shadow: 0 12px 34px -12px color-mix(in srgb, var(--brand) 68%, transparent);
 }
 .hero::after {
   content: "";
@@ -447,8 +447,8 @@ a { color: inherit; }
 .hero-cta:active { transform: scale(0.975); }
 
 .hero.rest {
-  background: linear-gradient(135deg, #2E9BFF 0%, #00D49A 100%);
-  box-shadow: 0 12px 34px -12px rgba(46, 155, 255, 0.65);
+  background: linear-gradient(135deg, var(--day-3, #2E9BFF) 0%, var(--day-4, #00D49A) 100%);
+  box-shadow: 0 12px 34px -12px color-mix(in srgb, var(--day-4, #00D49A) 62%, transparent);
 }
 
 /* --- Stat row --- */
@@ -745,7 +745,7 @@ a { color: inherit; }
   justify-content: center;
   gap: 8px;
   transition: transform 0.12s var(--tap), opacity 0.15s ease;
-  box-shadow: 0 10px 26px -12px rgba(124, 77, 255, 0.8);
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--brand) 78%, transparent);
 }
 .btn:active { transform: scale(0.98); }
 .btn.secondary {
@@ -791,7 +791,7 @@ a { color: inherit; }
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  box-shadow: 0 10px 28px -10px rgba(124, 77, 255, 0.75);
+  box-shadow: 0 10px 28px -10px color-mix(in srgb, var(--brand) 72%, transparent);
 }
 .avatar img {
   width: 100%;
@@ -955,6 +955,115 @@ a { color: inherit; }
   color: var(--brand);
 }
 
+/* --- Colour theme picker --- */
+.pal-dot {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 11px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.pal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.pal-card {
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  padding: 8px 8px 9px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.18s ease, transform 0.14s var(--tap);
+}
+.pal-card:active { transform: scale(0.96); }
+.pal-card.on { border-color: var(--brand); background: var(--surface-3); }
+
+.pal-swatch {
+  position: relative;
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+}
+.pal-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #12122a;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.2s ease, transform 0.24s var(--tap);
+}
+.pal-card.on .pal-check { opacity: 1; transform: scale(1); }
+
+.pal-dots { display: flex; gap: 3px; }
+.pal-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+}
+.pal-name { font-size: 11.5px; font-weight: 620; color: var(--text-2); }
+.pal-card.on .pal-name { color: var(--text); }
+
+.pal-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.pal-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 620;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.pal-arrow { color: var(--text-3); margin-top: -14px; }
+
+.color-input {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch {
+  border: 2px solid var(--border-2);
+  border-radius: 50%;
+}
+.color-input::-moz-color-swatch {
+  border: 2px solid var(--border-2);
+  border-radius: 50%;
+}
+
+.pal-preview {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.pal-bar { width: 100%; height: 30px; border-radius: 10px; display: block; }
+
 /* --- Training-day picker --- */
 .day-picker {
   display: grid;
@@ -981,7 +1090,7 @@ a { color: inherit; }
   background: var(--grad-brand);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 5px 16px -6px rgba(124, 77, 255, 0.9);
+  box-shadow: 0 5px 16px -6px color-mix(in srgb, var(--brand) 85%, transparent);
 }
 
 .assign { margin: 6px 0 4px; }
