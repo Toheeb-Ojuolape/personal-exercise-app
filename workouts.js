@@ -7,6 +7,9 @@ const WORKOUTS = [
   {
     id: "day1",
     day: "Day 1",
+    short: "Push",
+    iconName: "dayPush",
+    accent: "#7C4DFF",
     title: "Upper Body — Push",
     focus: "Chest, Shoulders, Triceps",
     warmup: "5 min brisk walk or bike + 2 sets of arm circles & band pull-aparts",
@@ -24,6 +27,9 @@ const WORKOUTS = [
   {
     id: "day2",
     day: "Day 2",
+    short: "Quads",
+    iconName: "daySquat",
+    accent: "#FF4D8D",
     title: "Lower Body — Quads & Glutes",
     focus: "Quads, Glutes, Calves, Core",
     warmup: "5 min bike + bodyweight squats & leg swings x10 each",
@@ -41,6 +47,9 @@ const WORKOUTS = [
   {
     id: "day3",
     day: "Day 3",
+    short: "Pull",
+    iconName: "dayPull",
+    accent: "#2E9BFF",
     title: "Upper Body — Pull",
     focus: "Back, Biceps, Rear Delts",
     warmup: "5 min row or bike + band pull-aparts x15",
@@ -58,6 +67,9 @@ const WORKOUTS = [
   {
     id: "day4",
     day: "Day 4",
+    short: "Hinge",
+    iconName: "dayHinge",
+    accent: "#00D49A",
     title: "Lower Body — Hamstrings, Glutes & Core",
     focus: "Hamstrings, Glutes, Core",
     warmup: "5 min bike + glute bridges x15 + hip hinges x10",
