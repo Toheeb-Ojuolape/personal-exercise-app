@@ -1,8 +1,13 @@
 // Colour themes. A palette drives the brand colour, the brand gradient, and
-// the four per-workout accents — everything else (surfaces, text, success and
+// the per-workout accents — everything else (surfaces, text, success and
 // danger) stays semantic so contrast and meaning hold across every theme.
 
 const PALETTE_KEY = "fitfour.palette";
+
+// One accent per workout category. Each palette below defines four anchor
+// colours; the rest are interpolated so a palette stays coherent as the
+// category list grows.
+const DAY_ACCENTS = 8;
 
 const PALETTES = [
   {
@@ -105,21 +110,71 @@ function lerpHue(a, b, t) {
   return a + d * t;
 }
 
+const lerp = (x, y, t) => x + (y - x) * t;
+
+/** Sample a colour from a list of hex stops, `t` running 0→1 across them. */
+function rampAt(stops, t) {
+  const x = clamp(t, 0, 1) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(x));
+  const f = x - i;
+  const a = hexToHsl(stops[i]);
+  const b = hexToHsl(stops[i + 1]);
+  return hslToHex(lerpHue(a.h, b.h, f), lerp(a.s, b.s, f), lerp(a.l, b.l, f));
+}
+
+// Lightness is nudged in alternating directions on top of the hue spread.
+// Hue alone isn't enough for the muted palettes — Slate's accents share a
+// blue-grey family, so two neighbours can differ by 4 steps of ramp and still
+// look identical. The ceiling stays below 0.62 so white icons keep their
+// contrast on the badges.
+const LIGHTEN = 0.07;
+const DARKEN = 0.18;
+const L_FLOOR = 0.3;
+const L_CEIL = 0.62;
+
 /**
- * Build a full palette from two user-chosen colours: the four day accents are
+ * Categories are listed next to each other, so consecutive accents have to be
+ * tellable apart. Interleaving the two halves of the ramp puts a wide hue gap
+ * between neighbours, then the alternating lightness shift separates even the
+ * pairs where the ramp doubles back on itself.
+ */
+function separate(ramp) {
+  const half = Math.ceil(ramp.length / 2);
+  const spread = [];
+  for (let i = 0; i < half; i++) {
+    spread.push(ramp[i]);
+    if (i + half < ramp.length) spread.push(ramp[i + half]);
+  }
+  return spread.map((hex, i) => {
+    const { h, s, l } = hexToHsl(hex);
+    const shift = i % 2 === 0 ? LIGHTEN : -DARKEN;
+    return hslToHex(h, clamp(s, 0.4, 0.95), clamp(l + shift, L_FLOOR, L_CEIL));
+  });
+}
+
+/** Resample a palette's anchor colours up to one accent per workout. */
+function expandDays(stops, count = DAY_ACCENTS) {
+  if (stops.length >= count) return stops.slice(0, count);
+  return separate(Array.from({ length: count }, (_, i) => rampAt(stops, i / (count - 1))));
+}
+
+/**
+ * Build a full palette from two user-chosen colours: the day accents are
  * sampled along the gradient between them, so they stay in the same family.
  */
 function customPalette(primary, secondary) {
   const a = hexToHsl(primary);
   const b = hexToHsl(secondary);
-  const lerp = (x, y, t) => x + (y - x) * t;
 
-  const days = [0, 1 / 3, 2 / 3, 1].map((t) =>
-    hslToHex(
-      lerpHue(a.h, b.h, t),
-      clamp(lerp(a.s, b.s, t), 0.45, 0.95),
-      clamp(lerp(a.l, b.l, t), 0.44, 0.68)
-    )
+  const days = separate(
+    Array.from({ length: DAY_ACCENTS }, (_, i) => {
+      const t = i / (DAY_ACCENTS - 1);
+      return hslToHex(
+        lerpHue(a.h, b.h, t),
+        clamp(lerp(a.s, b.s, t), 0.45, 0.95),
+        clamp(lerp(a.l, b.l, t), 0.44, 0.68)
+      );
+    })
   );
 
   const sat = clamp(Math.max(a.s, 0.55), 0, 0.95);
@@ -147,7 +202,7 @@ function savePaletteChoice(choice) {
   localStorage.setItem(PALETTE_KEY, JSON.stringify(choice));
 }
 
-/** The active choice resolved to concrete colours. */
+/** The active choice resolved to concrete colours, one accent per workout. */
 function resolvePalette(choice = getPaletteChoice()) {
   if (choice.id === "custom") {
     return customPalette(
@@ -155,7 +210,8 @@ function resolvePalette(choice = getPaletteChoice()) {
       choice.secondary || DEFAULT_CUSTOM.secondary
     );
   }
-  return PALETTES.find((p) => p.id === choice.id) || PALETTES[0];
+  const p = PALETTES.find((x) => x.id === choice.id) || PALETTES[0];
+  return { ...p, days: expandDays(p.days) };
 }
 
 function gradientCss(grad) {

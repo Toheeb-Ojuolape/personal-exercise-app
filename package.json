@@ -1,0 +1,20 @@
+{
+  "name": "fitfour",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A 4-day gym program PWA. Static site — this file exists only for the test runner.",
+  "scripts": {
+    "test": "node --test tests/unit/",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/",
+    "test:all": "npm run test && npm run test:integration"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "comments": {
+    "shipping": "Nothing here is served. netlify.toml publishes '.' with an empty build command, so the deployed site stays plain HTML/CSS/JS with no dependencies.",
+    "unit": "Runs on Node's built-in test runner with zero packages installed.",
+    "integration": "Needs Playwright: npm i -D playwright && npx playwright install chromium. Skips itself with instructions when it isn't there.",
+    "network": "Integration specs that hit YouTube/SoundCloud are skipped when FITFOUR_SKIP_NETWORK=1."
+  }
+}

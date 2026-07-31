@@ -21,14 +21,31 @@ function trainingDays() {
     .sort((a, b) => weekOrder(a) - weekOrder(b));
 }
 
+// Any fixed Monday works — it only anchors the weekly rotation below.
+const ROTATION_EPOCH = new Date(2024, 0, 1);
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** How many weeks a date sits from the rotation anchor. */
+const weekIndex = (date = new Date()) =>
+  Math.round((startOfWeek(date) - startOfWeek(ROTATION_EPOCH)) / WEEK_MS);
+
+/** Rotation is on unless the user turned it off. */
+const rotates = () => getProfile().rotate !== false;
+
 /**
- * Weekday → workout id. The four workouts are dealt out in order across
- * whichever days the user picked, cycling if they train more than four days.
+ * Weekday → workout id for the week containing `date`. Categories are dealt
+ * out in order across whichever days the user picked, and the deal shifts
+ * forward each week — so four training days still work through all eight
+ * categories every fortnight rather than repeating the same four.
  */
-function schedule() {
+function schedule(date = new Date()) {
+  const days = trainingDays();
+  const n = WORKOUTS.length;
+  const offset = rotates() ? (((weekIndex(date) * days.length) % n) + n) % n : 0;
+
   const map = {};
-  trainingDays().forEach((dow, i) => {
-    map[dow] = WORKOUTS[i % WORKOUTS.length].id;
+  days.forEach((dow, i) => {
+    map[dow] = WORKOUTS[(offset + i) % n].id;
   });
   return map;
 }
@@ -38,11 +55,10 @@ const weeklyTarget = () => new Set(Object.values(schedule())).size || WORKOUTS.l
 
 /** The next scheduled session after today, for the rest-day screen. */
 function nextSession() {
-  const sched = schedule();
   for (let i = 1; i <= 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
-    const id = sched[d.getDay()];
+    const id = schedule(d)[d.getDay()]; // per-date, so it survives the week rollover
     if (id) return { date: d, day: WORKOUTS.find((w) => w.id === id) };
   }
   return null;
@@ -177,7 +193,7 @@ function renderAppbar() {
   const bar = document.getElementById("appbar");
   const themeIcon = activeTheme() === "light" ? "moon" : "sun";
   const inDay = Boolean(route.dayId);
-  const titles = { today: "Today", plan: "Your Plan", progress: "Progress", profile: "Profile" };
+  const titles = { today: "Today", plan: "Your Plan", music: "Music", progress: "Progress", profile: "Profile" };
   const title = inDay
     ? WORKOUTS.find((d) => d.id === route.dayId)?.title
     : titles[route.tab];
@@ -205,6 +221,7 @@ function renderAppbar() {
   `;
 
   bar.querySelector("#backBtn")?.addEventListener("click", () => {
+    closeSheet();
     nav = "pop";
     route = { ...route, dayId: null };
     render();
@@ -222,6 +239,7 @@ function renderAppbar() {
 // ---------------------------------------------------------------- tab bar
 const TABS = [
   { id: "today", label: "Today", icon: "flame" },
+  { id: "music", label: "Music", icon: "music" },
   { id: "plan", label: "Plan", icon: "dumbbell" },
   { id: "progress", label: "Progress", icon: "chart" },
   { id: "profile", label: "Profile", icon: "user" },
@@ -249,6 +267,7 @@ function buildTabbar() {
   el.querySelectorAll("[data-tab]").forEach((btn) =>
     btn.addEventListener("click", () => {
       if (route.tab === btn.dataset.tab && !route.dayId) return;
+      closeSheet(); // never leave a form video running behind another screen
       nav = "fade";
       route = { tab: btn.dataset.tab, dayId: null };
       window.scrollTo(0, 0);
@@ -279,21 +298,28 @@ function screenToday() {
 
   const sched = schedule();
   const weekStart = startOfWeek();
+  const sessions = getSessions();
+
+  // Each scheduled day is a shortcut straight into that day's workout.
   const dots = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
     const key = dateKey(d);
-    const scheduled = sched[d.getDay()];
-    const isDone = getSessions().some((s) => dateKey(new Date(s.date)) === key);
+    const w = WORKOUTS.find((x) => x.id === sched[d.getDay()]);
+    const isDone = sessions.some((s) => dateKey(new Date(s.date)) === key);
     const isToday = key === dateKey();
-    const cls = isDone ? "done" : scheduled ? "planned" : "";
-    return `
-      <div class="week-day">
-        <span>${DOW[d.getDay()]}</span>
-        <div class="week-dot ${cls}${isToday && !isDone ? " today" : ""}">
-          ${isDone ? icon("check", 16) : scheduled ? `<span style="font-size:10px;font-weight:700">${WORKOUTS.findIndex((w) => w.id === scheduled) + 1}</span>` : ""}
-        </div>
-      </div>`;
+
+    const cls = [isDone ? "done" : w ? "planned" : "rest", isToday ? "today" : ""].join(" ");
+    const label = `${DOW_FULL[d.getDay()]} — ${w ? `${w.title}${isDone ? ", done" : ""}` : "rest day"}`;
+    const inner = `
+      <span class="week-lab">${DOW[d.getDay()]}</span>
+      <span class="week-dot ${cls}" style="color:${w ? dayColor(w) : "var(--text-3)"}">
+        ${isDone ? icon("check", 16) : w ? icon(w.iconName, 17) : ""}
+      </span>`;
+
+    return w
+      ? `<button class="week-day tappable" data-open-day="${w.id}" title="${esc(w.title)}" aria-label="${esc(label)}">${inner}</button>`
+      : `<div class="week-day" aria-label="${esc(label)}">${inner}</div>`;
   }).join("");
 
   return `
@@ -334,7 +360,7 @@ function screenToday() {
       <div class="stat"><div class="stat-val tnum">${weeklyStreak()}</div><div class="stat-lab">Week streak</div></div>
     </div>
 
-    <div class="section-head"><h3>Your week</h3></div>
+    <div class="section-head"><h3>Your week</h3><span class="hint">Tap a day to open it</span></div>
     <div class="card"><div class="week">${dots}</div></div>
 
     ${targets
@@ -360,19 +386,29 @@ function screenToday() {
 }
 
 function screenPlan() {
+  const sched = schedule();
+  const todayId = todaysDayId();
+  const byId = Object.entries(sched).reduce((acc, [dow, id]) => {
+    (acc[id] = acc[id] || []).push(Number(dow));
+    return acc;
+  }, {});
+
   return `
     <h1 class="large-title">Your Plan</h1>
-    <p class="subtitle">4 days a week · upper/lower split</p>
+    <p class="subtitle">${WORKOUTS.length} categories · ${trainingDays().length} days a week</p>
 
     <div class="card rows">
       ${WORKOUTS.map((d) => {
         const done = didDayThisWeek(d.id);
+        const on = byId[d.id] || [];
+        const when = on.length ? on.map((dow) => DOW_SHORT[dow]).join(" · ") : "Not on this week";
         return `
-          <button class="row" data-open-day="${d.id}">
+          <button class="row${d.id === todayId ? " is-today" : ""}" data-open-day="${d.id}">
             <div class="row-badge" style="background:${dayColor(d)}" title="${esc(d.short)}">${icon(d.iconName, 23)}</div>
             <div class="row-body">
               <div class="row-title">${esc(d.title)}</div>
               <div class="row-sub">${esc(d.focus)} · ${d.exercises.length} exercises</div>
+              <div class="row-when">${d.id === todayId ? "Today" : esc(when)}</div>
             </div>
             ${done
               ? `<div class="week-dot done" style="width:24px;height:24px">${icon("check", 14)}</div>`
@@ -396,10 +432,10 @@ function screenPlan() {
     <div class="section-head"><h3>Schedule</h3></div>
     <div class="card rows">
       <button class="row" data-open-schedule>
-        <div class="row-badge" style="background:linear-gradient(135deg,var(--day-3,#2E9BFF),var(--day-4,#00D49A))">${icon("timer", 20)}</div>
+        <div class="row-badge" style="background:linear-gradient(135deg,var(--day-3,#2E9BFF),var(--day-6,#00D49A))">${icon("timer", 20)}</div>
         <div class="row-body">
           <div class="row-title">Training days</div>
-          <div class="row-sub">${trainingDays().map((d) => DOW_SHORT[d]).join(" · ")}</div>
+          <div class="row-sub">${trainingDays().map((d) => DOW_SHORT[d]).join(" · ")}${rotates() ? " · rotating weekly" : ""}</div>
         </div>
         <span class="chev">${icon("chevron", 18)}</span>
       </button>
@@ -407,7 +443,9 @@ function screenPlan() {
 
     <div class="note" style="margin-top:12px">
       ${icon("info", 17)}
-      <div>Leave a rest day between heavy sessions where you can — but consistency beats the perfect calendar. Train the days you'll actually show up.</div>
+      <div>${rotates()
+        ? `Categories rotate each week, so <strong>${trainingDays().length} days a week</strong> still covers all ${WORKOUTS.length} in ${Math.ceil(WORKOUTS.length / Math.max(1, trainingDays().length))} weeks. Any category is always one tap away here.`
+        : "Rotation is off, so your week repeats the same categories. Turn it back on under Training days to work through all of them."}</div>
     </div>
   `;
 }
@@ -689,6 +727,10 @@ function openSheet(html, onMount) {
 
 function closeSheet() {
   document.getElementById("sheetWrap").hidden = true;
+  // Emptying the sheet unloads whatever it held. That's what stops a form
+  // video the moment you tap Done or dismiss the sheet — hiding the wrapper
+  // alone would leave the YouTube iframe playing behind the app.
+  document.getElementById("sheet").innerHTML = "";
   document.body.style.overflow = "";
 }
 
@@ -823,6 +865,7 @@ function openWeightSheet() {
 
 function openScheduleSheet() {
   const picked = new Set(trainingDays());
+  let rotate = rotates();
 
   // Order the toggles Monday-first to match the rest of the app.
   const order = [1, 2, 3, 4, 5, 6, 0];
@@ -832,9 +875,12 @@ function openScheduleSheet() {
     if (!days.length) {
       return `<p class="empty" style="padding:18px 0">Pick at least one day to build your week.</p>`;
     }
+    // Mirrors schedule(), including this week's rotation offset.
+    const n = WORKOUTS.length;
+    const offset = rotate ? (((weekIndex() * days.length) % n) + n) % n : 0;
     return days
       .map((dow, i) => {
-        const w = WORKOUTS[i % WORKOUTS.length];
+        const w = WORKOUTS[(offset + i) % n];
         return `
           <div class="assign-row">
             <span class="assign-day">${DOW_SHORT[dow]}</span>
@@ -848,7 +894,7 @@ function openScheduleSheet() {
   openSheet(
     `
     <h3>Training days</h3>
-    <p class="sheet-sub">Pick the days you'll actually be in the gym — weekends included. The four workouts are dealt out in order across whatever you choose.</p>
+    <p class="sheet-sub">Pick the days you'll actually be in the gym — weekends included. The ${WORKOUTS.length} categories are dealt out in order across whatever you choose.</p>
 
     <div class="day-picker" id="dayPicker">
       ${order
@@ -860,6 +906,18 @@ function openScheduleSheet() {
         .join("")}
     </div>
 
+    <div class="card card-pad" style="margin:16px 0 4px">
+      <div class="kv" style="padding:0;border:none">
+        <div style="flex:1">
+          <div class="kv-label" style="flex:none">Rotate weekly</div>
+          <div class="row-sub">Shift the deal each week so every category comes round</div>
+        </div>
+        <button class="switch${rotate ? " on" : ""}" id="rotateToggle" role="switch"
+                aria-checked="${rotate}" aria-label="Rotate categories weekly"><span></span></button>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin:18px 2px 6px"><h3>This week</h3></div>
     <div class="assign" id="assignPreview">${preview()}</div>
 
     <div class="btn-row"><button class="btn" id="saveSchedule">Save schedule</button></div>
@@ -867,6 +925,7 @@ function openScheduleSheet() {
     `,
     (sheet) => {
       const previewEl = sheet.querySelector("#assignPreview");
+      const rotateBtn = sheet.querySelector("#rotateToggle");
 
       sheet.querySelectorAll("[data-dow]").forEach((btn) =>
         btn.addEventListener("click", () => {
@@ -879,9 +938,20 @@ function openScheduleSheet() {
         })
       );
 
+      rotateBtn.addEventListener("click", () => {
+        rotate = !rotate;
+        rotateBtn.classList.toggle("on", rotate);
+        rotateBtn.setAttribute("aria-checked", String(rotate));
+        previewEl.innerHTML = preview();
+        navigator.vibrate?.(8);
+      });
+
       sheet.querySelector("#saveSchedule").addEventListener("click", () => {
         if (!picked.size) return;
-        saveProfile({ trainingDays: [...picked].sort((a, b) => weekOrder(a) - weekOrder(b)) });
+        saveProfile({
+          trainingDays: [...picked].sort((a, b) => weekOrder(a) - weekOrder(b)),
+          rotate,
+        });
         closeSheet();
         render();
       });
@@ -897,7 +967,7 @@ function openPaletteSheet() {
         <span class="pal-check">${icon("check", 15)}</span>
       </span>
       <span class="pal-dots">
-        ${p.days.map((c) => `<i style="background:${c}"></i>`).join("")}
+        ${expandDays(p.days).map((c) => `<i style="background:${c}"></i>`).join("")}
       </span>
       <span class="pal-name">${p.name}</span>
     </button>`;
@@ -1136,6 +1206,7 @@ function bindAvatar(view) {
 function bindScreen(view) {
   view.querySelectorAll("[data-open-day]").forEach((el) =>
     el.addEventListener("click", () => {
+      closeSheet();
       nav = "push";
       route = { tab: route.tab, dayId: el.dataset.openDay };
       window.scrollTo(0, 0);
@@ -1216,7 +1287,7 @@ function bindScreen(view) {
 
   view.querySelector("#exportBtn")?.addEventListener("click", () => {
     const blob = new Blob(
-      [JSON.stringify({ profile: getProfile(), palette: getPaletteChoice(), sessions: getSessions(), weights: getWeights(), ticks: getTicks() }, null, 2)],
+      [JSON.stringify({ profile: getProfile(), palette: getPaletteChoice(), sessions: getSessions(), weights: getWeights(), ticks: getTicks(), playlist: getPlaylist() }, null, 2)],
       { type: "application/json" }
     );
     const url = URL.createObjectURL(blob);
@@ -1231,14 +1302,16 @@ function bindScreen(view) {
     openSheet(
       `
       <h3>Reset all data?</h3>
-      <p class="sheet-sub">This permanently deletes your profile, workout history, and weight log from this device. It cannot be undone.</p>
+      <p class="sheet-sub">This permanently deletes your profile, workout history, weight log, and playlist from this device. It cannot be undone.</p>
       <div class="btn-row"><button class="btn" style="background:var(--coral);box-shadow:none" id="confirmReset">Delete everything</button></div>
       <div style="margin-top:10px"><button class="btn secondary" data-sheet-close>Keep my data</button></div>
       `,
       (sheet) =>
         sheet.querySelector("#confirmReset").addEventListener("click", () => {
-          [K_SESSIONS, K_WEIGHTS, K_TICKS, PROFILE_KEY, PALETTE_KEY].forEach((k) => localStorage.removeItem(k));
+          [K_SESSIONS, K_WEIGHTS, K_TICKS, PROFILE_KEY, PALETTE_KEY, MUSIC_KEY, PLAYER_KEY]
+            .forEach((k) => localStorage.removeItem(k));
           applyPalette();
+          resetPlayer();
           closeSheet();
           route = { tab: "today", dayId: null };
           render();
@@ -1255,12 +1328,17 @@ function render() {
   buildTabbar();
   updateTabbar();
 
+  // The player reads this to know whether the mini bar would duplicate the
+  // full controls already on screen.
+  document.body.dataset.tab = route.dayId ? "day" : route.tab;
+
   const view = document.getElementById("screen");
   view.classList.remove(...NAV_CLASSES);
 
   if (route.dayId) view.innerHTML = screenDay(route.dayId);
   else if (route.tab === "today") view.innerHTML = screenToday();
   else if (route.tab === "plan") view.innerHTML = screenPlan();
+  else if (route.tab === "music") view.innerHTML = musicScreenHtml();
   else if (route.tab === "progress") view.innerHTML = screenProgress();
   else view.innerHTML = screenProfile();
 
@@ -1270,10 +1348,17 @@ function render() {
   nav = "fade";
 
   bindScreen(view);
+  paintPlayer(); // fill the live player bits this screen just recreated
 }
 
 // ---------------------------------------------------------------- init
 applyTheme(activeTheme());
+initMusic();
+
+// Adding or removing a track changes the playlist screen, not just the player.
+window.addEventListener("music:changed", () => {
+  if (route.tab === "music" && !route.dayId) render();
+});
 
 // Follow the OS only while the user hasn't picked a theme themselves.
 window.matchMedia?.("(prefers-color-scheme: light)").addEventListener?.("change", () => {
