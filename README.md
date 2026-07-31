@@ -51,7 +51,19 @@ need the network).
   accents — resampled from each preset's anchors and separated in hue and
   lightness so neighbouring categories never look alike; changes apply live. Success green and error red stay fixed so
   meaning never shifts.
-- **Installable** — add to home screen for a standalone, full-screen app.
+- **Installable, offline-capable PWA** — a service worker precaches the whole
+  app shell, so it opens and works with no connection: browsing the plan,
+  ticking exercises, rest timers, weigh-ins and the full history. Only form
+  videos and streamed music need the network. Install from Profile → **App**,
+  or your browser's own menu. Home-screen shortcuts jump straight to Today,
+  Music, or Progress.
+- **Reminders** — set the time you plan to train, then pick as many lead times
+  as you want (2 hours, 1 hour, 30/15/10/5 min, at start) exactly like a
+  calendar invite. Each one is its own alert. Plus a ping when a rest timer
+  runs out while you're in another app. See
+  [Reminders](#reminders-and-what-they-can-actually-do).
+- **Home screen** — a badge on the installed app icon while today's session is
+  still outstanding, and a Windows 11 widget. See [Widgets](#widgets-and-the-home-screen).
 - **Motion** — directional screen transitions (slide in when you open a
   workout, slide back when you leave, cross-fade between tabs), a tab bar with
   a sliding indicator and icon pop, and pressed states throughout. All of it
@@ -122,8 +134,11 @@ blank, set the publish directory to `.`. `netlify.toml` already covers this.
 | `icons.js` | Inline SVG icon set |
 | `music.js` | Playlist storage, link parsing, the player, and its persistent UI |
 | `spotify.js` | Spotify PKCE sign-in and Web Playback SDK wrapper |
+| `notify.js` | Service worker registration, install prompt, reminder scheduling |
+| `sw.js` | Offline shell cache, update flow, background reminders |
+| `tools/make-icons.js` | Regenerates `icons/` from the app artwork (dev only) |
 | `app.js` | Router, screens, sheets, rest timer |
-| `manifest.json`, `icon.svg` | Add-to-home-screen support |
+| `manifest.json`, `icon.svg`, `icons/` | Install metadata and icon set |
 | `tests/` | Unit and integration specs — dev only, never deployed |
 | `package.json` | Test scripts and the optional Playwright dev dependency |
 
@@ -160,6 +175,82 @@ strength-coaching channel — Jeff Nippard, ATHLEAN-X, Renaissance
 Periodization, NASM, Buff Dudes, Jeremy Ethier and similar. Each video ID was
 verified against YouTube's oEmbed API rather than guessed. Videos load only
 when you open one, so the workout list stays fast.
+
+## Reminders, and what they can actually do
+
+Notifications are opt-in under Profile → **App** → Workout reminders.
+
+| | |
+|---|---|
+| **Works reliably** | A reminder while FitFour is in the background. A rest-timer ping after you've switched apps. Both go through the service worker, so they survive the page being backgrounded. |
+| **Best effort** | A reminder with every tab closed. Chrome can wake an installed PWA through Periodic Background Sync, so it's wired up — but the browser decides whether and when it runs, and Safari has no equivalent. |
+| **Not possible here** | A guaranteed alert at an exact time with the app closed. That needs Web Push, which needs a server holding VAPID keys. This app has no backend by design. |
+
+Lead times work like a calendar invite: one **gym time**, and any number of
+alerts before it. Each lead time fires once per day and is tracked separately,
+so the 30-minute warning going out never silences the one at the start. Each
+gets its own notification tag, or the second would silently replace the first.
+
+Two deliberate behaviours:
+
+- **It stays quiet while you're looking at the app.** A nudge is for reaching
+  you elsewhere; if FitFour is on screen, today's session is already in front
+  of you. It also isn't marked as delivered in that case, so it can still fire
+  once you leave.
+- **It never nudges twice in a day**, and never on a rest day or after you've
+  finished the session.
+
+Because a service worker can't read `localStorage`, the page mirrors a small
+plan (enabled, gym time, lead times, which have already fired, training days,
+whether today is done, plus week stats for the widget) into Cache Storage under
+`fitfour-plan`. That's the only way a background wake-up — or the widget — can
+know what's going on. A background wake-up sends only the most urgent lead time
+that's genuinely due, since firing a backlog of three at once would be worse
+than sending nothing.
+
+## Widgets and the home screen
+
+Worth being blunt about what's possible, because "widget" means different
+things per platform:
+
+| Platform | What you get |
+|---|---|
+| **Android / iOS** | **No home-screen widget is possible for a web app** — those need `AppWidgetProvider` or WidgetKit in a native app. What you do get: the installed icon, long-press **shortcuts** into Today/Music/Progress, and a **badge** on the icon while today's session is outstanding. |
+| **Windows 11** | A real widget in the Widgets Board, declared with the manifest `widgets` member and rendered from an Adaptive Card. Shows today's session, weekly count and streak, with a button that opens the app. |
+| **macOS / desktop** | The dock or taskbar icon carries the same badge. |
+
+The badge uses the Badging API and is best-effort: unsupported browsers and
+uninstalled tabs simply ignore it, and nothing else depends on it.
+
+The Windows widget lives in `widgets/`: `today-template.json` is the Adaptive
+Card, `today-data.json` is the placeholder shown before the app has ever run.
+`sw.js` handles `widgetinstall`, `widgetresume` and `widgetclick`, filling the
+card from the mirrored plan. Unknown manifest members are ignored everywhere
+else, so none of this affects installability on other platforms.
+
+## Offline and updates
+
+`sw.js` precaches the shell and serves it cache-first, revalidating in the
+background. Navigations try the network first and fall back to the cached page,
+so a deploy lands promptly but a dead connection still opens the app.
+Cross-origin requests are never intercepted — caching a YouTube or Spotify
+media stream would break playback and fill up storage.
+
+**When you change a file, bump `VERSION` in `sw.js`.** There's no build step to
+hash filenames, so that constant is what tells an installed copy its cache is
+stale. When a new worker is waiting, the app shows a "new version is ready" bar
+rather than reloading underneath you.
+
+Icons are generated from the same artwork as `icon.svg`:
+
+```bash
+node tools/make-icons.js
+```
+
+That writes `icons/` at the sizes Chrome's install criteria require, plus a
+maskable variant drawn full-bleed with the mark inside the 80% safe zone (a
+rounded-square icon gets its corners clipped by Android launchers) and a
+monochrome badge for the notification status bar.
 
 ## Music and background playback
 

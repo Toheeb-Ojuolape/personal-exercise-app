@@ -78,8 +78,64 @@ const read = (key, fallback) => {
 const write = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 
 const getSessions = () => read(K_SESSIONS, []);
-const getWeights = () => read(K_WEIGHTS, []);
 const getTicks = () => read(K_TICKS, {});
+
+const weightUid = () => `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * Weigh-ins, each with a stable id. Entries logged before ids existed get one
+ * on first read: editing an entry can change its date, so the date itself
+ * can't serve as identity.
+ */
+function getWeights() {
+  const list = read(K_WEIGHTS, []);
+  if (!Array.isArray(list)) return [];
+
+  let migrated = false;
+  const withIds = list.map((w) => {
+    if (w?.id) return w;
+    migrated = true;
+    return { ...w, id: weightUid() };
+  });
+  if (migrated) write(K_WEIGHTS, withIds);
+  return withIds;
+}
+
+const saveWeights = (list) => write(K_WEIGHTS, list);
+
+/** Newest first. */
+const weightsDesc = () => [...getWeights()].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+/**
+ * Calorie and protein targets are derived from bodyweight, so the profile
+ * follows the most recent weigh-in — re-derived after any edit or deletion,
+ * not just after logging.
+ */
+function syncProfileWeight() {
+  const latest = weightsDesc()[0];
+  if (latest) saveProfile({ weightKg: latest.kg });
+}
+
+function addWeight(kg, date = new Date()) {
+  saveWeights([...getWeights(), { id: weightUid(), date: date.toISOString(), kg }]);
+  syncProfileWeight();
+}
+
+function updateWeight(id, { kg, date }) {
+  saveWeights(
+    getWeights().map((w) =>
+      w.id === id
+        ? { ...w, ...(kg != null ? { kg } : {}), ...(date ? { date: date.toISOString() } : {}) }
+        : w
+    )
+  );
+  syncProfileWeight();
+}
+
+function deleteWeight(id) {
+  saveWeights(getWeights().filter((w) => w.id !== id));
+  syncProfileWeight();
+}
 
 const dateKey = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -538,13 +594,16 @@ function screenProgress() {
              const d = prev ? w.kg - prev.kg : null;
              const cls = d == null ? "flat" : d < -0.05 ? "down" : d > 0.05 ? "up" : "flat";
              return `
-               <div class="log-row">
+               <button class="log-row tappable" data-edit-weight="${w.id}"
+                       aria-label="Edit ${displayWeight(w.kg, p)} ${unit} logged ${relDate(w.date)}">
                  <span class="log-date">${relDate(w.date)}</span>
                  <span class="log-val tnum">${displayWeight(w.kg, p)} ${unit}</span>
                  <span class="delta ${cls} tnum">${d == null ? "—" : `${d > 0 ? "+" : ""}${displayWeight(d, p)}`}</span>
-               </div>`;
+                 <span class="log-edit">${icon("edit", 15)}</span>
+               </button>`;
            }).join("")}
-         </div>`
+         </div>
+         ${desc.length > 8 ? `<p class="log-more">Showing the last 8 of ${desc.length} weigh-ins.</p>` : ""}`
       : `<div class="card" style="margin-top:12px"><div class="empty">${icon("scale", 34)}Log your weight to see your trend line here.</div></div>`}
 
     <div class="section-head"><h3>Recent sessions</h3></div>
@@ -684,6 +743,8 @@ function screenProfile() {
       </div>
     </div>
 
+    ${appSectionHtml()}
+
     <div class="card rows" style="margin-top:12px">
       <button class="row" data-open-palette>
         <span class="pal-dot" style="background:var(--grad-brand)"></span>
@@ -713,6 +774,276 @@ function screenProfile() {
       Everything is stored only on this device.<br />Warm up first and stop if you feel sharp pain.
     </p>
   `;
+}
+
+// ---------------------------------------------------------------- app / PWA
+/** Install and reminder controls, shown on Profile. */
+function appSectionHtml() {
+  const n = getNotifySettings();
+  const permission = notifyPermission();
+  const installed = isInstalled();
+
+  const reminderSub = !notifySupported()
+    ? "This browser doesn't support notifications"
+    : permission === "denied"
+      ? "Blocked — turn notifications on in your browser settings"
+      : n.workout
+        ? `${esc(n.time)} on training days · ${n.offsets.length} alert${n.offsets.length === 1 ? "" : "s"}`
+        : "Off";
+
+  return `
+    <div class="section-head"><h3>App</h3></div>
+    <div class="card rows">
+      ${installed
+        ? `<div class="row" style="cursor:default">
+             <div class="row-badge" style="background:var(--mint);color:#04231A">${icon("check", 20)}</div>
+             <div class="row-body">
+               <div class="row-title">Installed</div>
+               <div class="row-sub">Running as an app · works offline</div>
+             </div>
+           </div>`
+        : `<button class="row" id="installBtn">
+             <div class="row-badge" style="background:var(--grad-brand)">${icon("plus", 20)}</div>
+             <div class="row-body">
+               <div class="row-title">Install FitFour</div>
+               <div class="row-sub">${canInstall()
+                 ? "Add to your home screen — works offline"
+                 : "Use your browser's Add to Home Screen"}</div>
+             </div>
+             <span class="chev">${icon("chevron", 18)}</span>
+           </button>`}
+
+      <button class="row" data-open-reminders>
+        <div class="row-badge" style="background:linear-gradient(135deg,var(--day-3,#2E9BFF),var(--day-5,#00D49A))">${icon("timer", 20)}</div>
+        <div class="row-body">
+          <div class="row-title">Workout reminders</div>
+          <div class="row-sub">${reminderSub}</div>
+        </div>
+        <span class="chev">${icon("chevron", 18)}</span>
+      </button>
+    </div>`;
+}
+
+function openRemindersSheet() {
+  const n = getNotifySettings();
+  const permission = notifyPermission();
+  const blocked = permission === "denied";
+  const unsupported = !notifySupported();
+
+  openSheet(
+    `
+    <h3>Reminders</h3>
+    <p class="sheet-sub">A nudge on the days you've chosen to train, and a ping when a rest timer runs out while you're in another app.</p>
+
+    ${unsupported
+      ? `<p class="add-error">This browser doesn't support notifications.</p>`
+      : blocked
+        ? `<p class="add-error">Notifications are blocked for this site. Turn them back on in your browser's settings for this page, then come back.</p>`
+        : ""}
+
+    <div class="card">
+      <div class="kv">
+        <div style="flex:1">
+          <div class="kv-label" style="flex:none">Workout reminder</div>
+          <div class="row-sub">On ${trainingDays().map((d) => DOW_SHORT[d]).join(" · ")}</div>
+        </div>
+        <button class="switch${n.workout ? " on" : ""}" id="remWorkout" role="switch"
+                aria-checked="${n.workout}" aria-label="Workout reminders"
+                ${unsupported || blocked ? "disabled" : ""}><span></span></button>
+      </div>
+      <div class="kv time-row${n.workout ? "" : " off"}" id="remTimeRow">
+        <span class="kv-label">Gym time</span>
+        <label class="time-field">
+          ${icon("timer", 16)}
+          <input class="time-input" id="remTime" type="time" value="${esc(n.time)}"
+                 aria-label="Gym time"
+                 ${unsupported || blocked || !n.workout ? "disabled" : ""} />
+        </label>
+      </div>
+      <div class="kv lead-row${n.workout ? "" : " off"}" id="remLeadRow">
+        <div style="flex:1">
+          <div class="kv-label" style="flex:none">Nudge me</div>
+          <div class="row-sub">Pick as many as you like — one alert each</div>
+        </div>
+      </div>
+      <div class="lead-chips${n.workout ? "" : " off"}" id="remLeads" role="group" aria-label="When to be reminded">
+        ${REMINDER_OFFSETS.map((mins) => {
+          const on = n.offsets.includes(mins);
+          return `<button class="lead-chip${on ? " on" : ""}" data-offset="${mins}"
+                          aria-pressed="${on}" ${unsupported || blocked || !n.workout ? "disabled" : ""}
+          >${esc(offsetLabel(mins))}</button>`;
+        }).join("")}
+      </div>
+      <div class="kv">
+        <div style="flex:1">
+          <div class="kv-label" style="flex:none">Rest timer</div>
+          <div class="row-sub">Only when you've switched away from FitFour</div>
+        </div>
+        <button class="switch${n.rest ? " on" : ""}" id="remRest" role="switch"
+                aria-checked="${n.rest}" aria-label="Rest timer notifications"
+                ${unsupported || blocked ? "disabled" : ""}><span></span></button>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:14px">
+      ${icon("info", 17)}
+      <div>Reminders arrive when FitFour is in the background — if you're already looking at the app it stays quiet, since today's session is on screen anyway.${isInstalled() ? "" : " <strong>Install the app</strong> for the most reliable delivery."} A guaranteed alert with every tab closed would need a notification server, which this app deliberately doesn't have.</div>
+    </div>
+
+    <div class="btn-row"><button class="btn secondary" data-sheet-close>Done</button></div>
+    `,
+    (sheet) => {
+      const workout = sheet.querySelector("#remWorkout");
+      const rest = sheet.querySelector("#remRest");
+      const time = sheet.querySelector("#remTime");
+      const timeRow = sheet.querySelector("#remTimeRow");
+      const leadRow = sheet.querySelector("#remLeadRow");
+      const leads = sheet.querySelector("#remLeads");
+
+      // The time and lead times only mean anything once reminders are on.
+      const setTimeEnabled = (on) => {
+        const locked = !on || unsupported || blocked;
+        timeRow.classList.toggle("off", !on);
+        leadRow.classList.toggle("off", !on);
+        leads.classList.toggle("off", !on);
+        time.disabled = locked;
+        leads.querySelectorAll(".lead-chip").forEach((chip) => (chip.disabled = locked));
+      };
+
+      leads.querySelectorAll(".lead-chip").forEach((chip) =>
+        chip.addEventListener("click", () => {
+          const mins = Number(chip.dataset.offset);
+          const current = getNotifySettings().offsets;
+          const next = current.includes(mins)
+            ? current.filter((o) => o !== mins)
+            : [...current, mins];
+
+          // At least one lead time has to remain, or "reminders on" would mean
+          // nothing ever arrives.
+          if (!next.length) return;
+
+          // Re-arming a lead time makes it eligible again today.
+          const fired = { ...getNotifySettings().fired };
+          delete fired[String(mins)];
+
+          saveNotifySettings({ offsets: next, fired });
+          const on = next.includes(mins);
+          chip.classList.toggle("on", on);
+          chip.setAttribute("aria-pressed", String(on));
+          navigator.vibrate?.(8);
+          refresh();
+        })
+      );
+
+      // Chrome only opens the picker from its own indicator, which is hidden
+      // here — so the whole pill acts as the target instead.
+      time?.closest(".time-field").addEventListener("click", () => {
+        if (time.disabled) return;
+        try { time.showPicker?.(); } catch { /* not user-activated, or unsupported */ }
+      });
+
+      const refresh = () => {
+        syncReminders();
+        render(); // the Profile row summary changes with these
+      };
+
+      workout?.addEventListener("click", async () => {
+        const turningOn = !workout.classList.contains("on");
+        if (turningOn) {
+          const result = await requestNotifyPermission();
+          if (result !== "granted") {
+            closeSheet();
+            render();
+            return;
+          }
+          requestPeriodicSync();
+        }
+        saveNotifySettings({ workout: turningOn });
+        workout.classList.toggle("on", turningOn);
+        workout.setAttribute("aria-checked", String(turningOn));
+        setTimeEnabled(turningOn);
+        refresh();
+      });
+
+      rest?.addEventListener("click", async () => {
+        const turningOn = !rest.classList.contains("on");
+        if (turningOn && (await requestNotifyPermission()) !== "granted") {
+          closeSheet();
+          render();
+          return;
+        }
+        saveNotifySettings({ rest: turningOn });
+        rest.classList.toggle("on", turningOn);
+        rest.setAttribute("aria-checked", String(turningOn));
+        refresh();
+      });
+
+      time?.addEventListener("change", () => {
+        if (!time.value) return;
+        // A new gym time is a fresh commitment, so every lead time becomes
+        // eligible again today rather than staying marked as already sent.
+        saveNotifySettings({ time: time.value, fired: {} });
+        refresh();
+      });
+    }
+  );
+}
+
+/**
+ * Safari and Firefox never fire beforeinstallprompt, so there's no button we
+ * can wire up — the only honest thing is to describe the browser's own menu.
+ */
+function openInstallHelpSheet() {
+  const ua = navigator.userAgent;
+  // An iPad reports itself as a Mac, so touch points are what separate them.
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+
+  openSheet(`
+    <h3>Install FitFour</h3>
+    <p class="sheet-sub">Installing gives it its own icon and window, keeps it working offline, and makes reminders more reliable.</p>
+    <ol class="setup-steps">
+      ${iOS
+        ? `<li>Tap the <strong>Share</strong> button in Safari's toolbar.</li>
+           <li>Scroll down and choose <strong>Add to Home Screen</strong>.</li>
+           <li>Tap <strong>Add</strong>.</li>`
+        : `<li>Open your browser's menu (usually <strong>⋮</strong> or <strong>⋯</strong>).</li>
+           <li>Choose <strong>Install app</strong>, or <strong>Add to Home Screen</strong>.</li>
+           <li>Confirm.</li>`}
+    </ol>
+    <div class="btn-row"><button class="btn secondary" data-sheet-close>Got it</button></div>
+  `);
+}
+
+/** Push the current schedule at the reminder layer and the widget. */
+function syncReminders() {
+  const dayId = todaysDayId();
+  const day = dayId ? WORKOUTS.find((d) => d.id === dayId) : null;
+  scheduleWorkoutReminder({
+    scheduledToday: Boolean(day),
+    doneToday: day ? didDayOn(day.id, dateKey()) : false,
+    title: day ? `${day.title} today` : "Time to train",
+    body: day ? `${day.focus} · ${day.exercises.length} exercises` : "Your session is waiting.",
+    stats: {
+      weekDone: sessionsThisWeek().length,
+      weekTarget: weeklyTarget(),
+      streak: weeklyStreak(),
+    },
+  });
+}
+
+/** A small bar offering to load a newly deployed version. */
+function showUpdateBanner() {
+  if (document.getElementById("updateBar")) return;
+  const bar = document.createElement("div");
+  bar.className = "update-bar";
+  bar.id = "updateBar";
+  bar.innerHTML = `
+    <span>A new version is ready.</span>
+    <button class="update-btn" id="updateNow">Reload</button>
+    <button class="update-x" id="updateLater" aria-label="Dismiss">${icon("close", 15)}</button>`;
+  document.body.appendChild(bar);
+  bar.querySelector("#updateNow").addEventListener("click", applyUpdate);
+  bar.querySelector("#updateLater").addEventListener("click", () => bar.remove());
 }
 
 // ---------------------------------------------------------------- sheets
@@ -849,16 +1180,105 @@ function openWeightSheet() {
       const save = () => {
         const kg = inputWeightToKg(input.value, getProfile());
         if (kg == null) return;
-        const list = getWeights();
-        list.push({ date: new Date().toISOString(), kg });
-        write(K_WEIGHTS, list);
-        saveProfile({ weightKg: kg }); // keep targets in sync with latest weigh-in
+        addWeight(kg);
         closeSheet();
         render();
       };
 
       sheet.querySelector("#saveWeightBtn").addEventListener("click", save);
       input.addEventListener("keydown", (e) => e.key === "Enter" && save());
+    }
+  );
+}
+
+/** Move a date to a different day while keeping its time of day. */
+function dateOnDay(ymd, isoRef) {
+  const [y, m, d] = String(ymd).split("-").map(Number);
+  const next = new Date(isoRef);
+  next.setFullYear(y, m - 1, d); // set together, so a 31st never rolls a month
+  return next;
+}
+
+function openEditWeightSheet(id) {
+  const p = getProfile();
+  const unit = weightUnit(p);
+  const entry = getWeights().find((w) => w.id === id);
+  if (!entry) return;
+
+  openSheet(
+    `
+    <h3>Edit weigh-in</h3>
+    <p class="sheet-sub">Logged ${esc(relDate(entry.date))}. Correcting a typo here re-draws your trend and updates your targets.</p>
+
+    <div class="field">
+      <label for="eWeight">Weight (${unit})</label>
+      <input class="input" id="eWeight" type="number" inputmode="decimal" step="0.1"
+             value="${displayWeight(entry.kg, p)}" />
+    </div>
+
+    <div class="field">
+      <label for="eDate">Date</label>
+      <input class="input" id="eDate" type="date" value="${dateKey(new Date(entry.date))}"
+             max="${dateKey()}" />
+    </div>
+
+    <p class="add-error" id="eError" hidden></p>
+
+    <div class="btn-row"><button class="btn" id="eSave">Save changes</button></div>
+    <div style="margin-top:10px"><button class="btn danger" id="eDelete">${icon("trash", 18)}<span>Delete this entry</span></button></div>
+    <div style="margin-top:10px"><button class="btn secondary" data-sheet-close>Cancel</button></div>
+    `,
+    (sheet) => {
+      const weight = sheet.querySelector("#eWeight");
+      const date = sheet.querySelector("#eDate");
+      const error = sheet.querySelector("#eError");
+      const del = sheet.querySelector("#eDelete");
+
+      const fail = (message) => {
+        error.textContent = message;
+        error.hidden = false;
+      };
+
+      const save = () => {
+        const kg = inputWeightToKg(weight.value, getProfile());
+        if (kg == null) return fail("Enter a weight greater than zero.");
+        if (!date.value) return fail("Pick a date for this weigh-in.");
+
+        const when = dateOnDay(date.value, entry.date);
+        // Trends only make sense backwards; a future weigh-in hasn't happened.
+        if (dateKey(when) > dateKey()) return fail("That date is in the future.");
+
+        updateWeight(id, { kg, date: when });
+        closeSheet();
+        render();
+      };
+
+      sheet.querySelector("#eSave").addEventListener("click", save);
+      [weight, date].forEach((el) =>
+        el.addEventListener("keydown", (e) => e.key === "Enter" && save())
+      );
+
+      // Two-step rather than a whole confirm sheet: deleting one weigh-in is
+      // small enough to undo by re-logging, but shouldn't happen on a mis-tap.
+      let armed = false;
+      let disarm = null;
+      del.addEventListener("click", () => {
+        if (!armed) {
+          armed = true;
+          del.classList.add("armed");
+          del.innerHTML = `${icon("trash", 18)}<span>Tap again to delete</span>`;
+          disarm = setTimeout(() => {
+            armed = false;
+            del.classList.remove("armed");
+            del.innerHTML = `${icon("trash", 18)}<span>Delete this entry</span>`;
+          }, 4000);
+          return;
+        }
+        clearTimeout(disarm);
+        deleteWeight(id);
+        closeSheet();
+        render();
+      });
     }
   );
 }
@@ -1126,6 +1546,9 @@ function startRest(seconds) {
     if (left <= 0) {
       stopRest();
       navigator.vibrate?.([120, 60, 120]);
+      // Only surfaces if you've switched away — otherwise the on-screen timer
+      // has already told you.
+      notifyRestFinished();
       return;
     }
     paint();
@@ -1235,6 +1658,16 @@ function bindScreen(view) {
     el.addEventListener("click", openPaletteSheet)
   );
 
+  view.querySelectorAll("[data-open-reminders]").forEach((el) =>
+    el.addEventListener("click", openRemindersSheet)
+  );
+
+  view.querySelector("#installBtn")?.addEventListener("click", async () => {
+    if (!canInstall()) return openInstallHelpSheet();
+    await promptInstall();
+    render();
+  });
+
   // Videos load only when opened, so the day list stays light.
   view.querySelectorAll("[data-play]").forEach((el) =>
     el.addEventListener("click", () => openVideoSheet(route.dayId, Number(el.dataset.play)))
@@ -1267,6 +1700,10 @@ function bindScreen(view) {
   });
 
   view.querySelector("#logWeightBtn")?.addEventListener("click", openWeightSheet);
+
+  view.querySelectorAll("[data-edit-weight]").forEach((el) =>
+    el.addEventListener("click", () => openEditWeightSheet(el.dataset.editWeight))
+  );
   view.querySelector("#editProfileBtn")?.addEventListener("click", openProfileSheet);
   bindAvatar(view);
 
@@ -1349,11 +1786,45 @@ function render() {
 
   bindScreen(view);
   paintPlayer(); // fill the live player bits this screen just recreated
+  syncReminders(); // ticking or finishing a session changes what's owed today
 }
 
 // ---------------------------------------------------------------- init
 applyTheme(activeTheme());
 initMusic();
+
+// A manifest shortcut lands on ./index.html?tab=…, so honour it before the
+// first render and then tidy the address bar.
+(function applyLaunchUrl() {
+  const params = new URLSearchParams(location.search);
+  const tab = params.get("tab");
+  if (TABS.some((t) => t.id === tab)) route = { tab, dayId: null };
+  if (tab) {
+    params.delete("tab");
+    const query = params.toString();
+    history.replaceState({}, "", location.pathname + (query ? `?${query}` : ""));
+  }
+})();
+
+registerServiceWorker(showUpdateBanner);
+watchInstallPrompt(() => {
+  if (route.tab === "profile" && !route.dayId) render();
+});
+
+// Tapping a notification focuses the tab rather than opening a second one.
+navigator.serviceWorker?.addEventListener?.("message", (event) => {
+  if (event.data?.type !== "NOTIFICATION_CLICK") return;
+  nav = "fade";
+  route = { tab: "today", dayId: null };
+  render();
+});
+
+// Reminders are re-armed whenever the app comes back into view: a tab left
+// open overnight would otherwise still be aiming at yesterday's time.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") syncReminders();
+});
+window.addEventListener("focus", syncReminders);
 
 // Adding or removing a track changes the playlist screen, not just the player.
 window.addEventListener("music:changed", () => {
