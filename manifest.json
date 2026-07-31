@@ -1,18 +1,61 @@
 {
+  "id": "/fitfour",
   "name": "FitFour — Lose Fat, Build Muscle",
   "short_name": "FitFour",
-  "description": "A 4-day gym program with form videos, macro targets, and progress tracking.",
+  "description": "Eight muscle-group workouts with form videos, macro targets, a built-in music player, and progress tracking.",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#08080C",
   "theme_color": "#08080C",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
   "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "widgets": [
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "name": "Today's workout",
+      "short_name": "Today",
+      "tag": "fitfour-today",
+      "description": "The session scheduled for today, plus your weekly progress.",
+      "template": "fitfour-today",
+      "ms_ac_template": "widgets/today-template.json",
+      "data": "widgets/today-data.json",
+      "type": "application/json",
+      "auth": false,
+      "update": 3600,
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Today's workout",
+      "short_name": "Today",
+      "description": "Jump straight into the session scheduled for today",
+      "url": "./index.html?tab=today",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Music",
+      "short_name": "Music",
+      "description": "Your workout playlist",
+      "url": "./index.html?tab=music",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Progress",
+      "short_name": "Progress",
+      "description": "Weigh-ins and session history",
+      "url": "./index.html?tab=progress",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

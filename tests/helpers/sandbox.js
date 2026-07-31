@@ -15,7 +15,7 @@ const { webcrypto } = require("node:crypto");
 const ROOT = path.resolve(__dirname, "..", "..");
 
 /** Same order as index.html, minus app.js — that one boots the UI on load. */
-const APP_SCRIPTS = ["workouts.js", "icons.js", "palette.js", "profile.js", "spotify.js", "music.js"];
+const APP_SCRIPTS = ["workouts.js", "icons.js", "palette.js", "profile.js", "spotify.js", "music.js", "notify.js"];
 
 function makeStorage() {
   const map = new Map();

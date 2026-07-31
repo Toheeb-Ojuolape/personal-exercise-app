@@ -44,10 +44,14 @@ function makeWav({ seconds = 2, freq = 440, rate = 8000 } = {}) {
 
 const TONE = makeWav();
 
-/** Start on an ephemeral port. Resolves to { origin, close }. */
+/** Start on an ephemeral port. Resolves to { origin, hits, close }. */
 function startServer() {
+  // Counts requests per path, so a test can tell a cache hit from a real fetch.
+  const hits = new Map();
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
+    hits.set(url.pathname, (hits.get(url.pathname) || 0) + 1);
 
     if (url.pathname === "/test-audio.wav") {
       res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": TONE.length });
@@ -82,6 +86,7 @@ function startServer() {
       const { port } = server.address();
       resolve({
         origin: `http://localhost:${port}`,
+        hits: (pathname) => hits.get(pathname) || 0,
         close: () => new Promise((done) => server.close(done)),
       });
     });

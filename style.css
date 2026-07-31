@@ -947,6 +947,44 @@ a { color: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .log-row:last-child { border-bottom: none; }
+
+/* A weigh-in row opens its editor; session rows stay static. */
+button.log-row.tappable {
+  width: 100%;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+button.log-row.tappable:active { background: var(--surface-2); }
+.log-edit {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  opacity: 0.7;
+}
+button.log-row.tappable:hover .log-edit { opacity: 1; color: var(--brand); }
+
+.log-more {
+  margin: 10px 4px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* Second tap confirms a delete. */
+.btn.danger.armed {
+  background: var(--coral);
+  border-color: transparent;
+  color: #fff;
+}
+
 .log-date { flex: 1; font-size: 14px; font-weight: 550; }
 .log-val { font-size: 14.5px; font-weight: 650; letter-spacing: -0.015em; }
 .delta { font-size: 12px; font-weight: 650; min-width: 52px; text-align: right; }
@@ -1877,6 +1915,140 @@ a.track-tool { text-decoration: none; color: var(--coral); }
   background: color-mix(in srgb, var(--mint) 12%, transparent);
 }
 .copy-field.copied .icon { color: var(--mint); }
+
+/* --- Reminder time picker --- */
+/* Sized to its content and tinted like the segmented controls it sits beside,
+   rather than reading as a full-width form field among the switches. */
+.time-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 11px;
+  background: var(--surface-3);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.time-field .icon { color: var(--text-3); transition: color 0.18s ease; }
+.time-field:focus-within {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.time-field:focus-within .icon { color: var(--brand); }
+
+.time-input {
+  width: auto;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.time-input:focus { outline: none; box-shadow: none; }
+/* The pill carries its own clock, and the whole thing opens the picker. */
+.time-input::-webkit-calendar-picker-indicator { display: none; }
+.time-input::-webkit-datetime-edit { padding: 0; }
+
+/* Label and picker split the row down the middle, so the time gets room to
+   breathe instead of being squeezed against the right edge. */
+.time-row .kv-label { flex: 0 0 50%; }
+.time-row .time-field { flex: 1; min-width: 0; justify-content: center; }
+
+/* --- Lead times --- */
+/* Calendar-invite style: pick as many as you want, each one its own alert. */
+.lead-row { padding-bottom: 4px; border-bottom: none; }
+.lead-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 15px 15px;
+  transition: opacity 0.2s ease;
+}
+.lead-chip {
+  height: 32px;
+  padding: 0 13px;
+  border-radius: 99px;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: transform 0.14s var(--tap), background 0.18s ease,
+    color 0.18s ease, border-color 0.18s ease;
+}
+.lead-chip:active { transform: scale(0.94); }
+.lead-chip.on {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.lead-chip:disabled { cursor: default; }
+.lead-chips.off,
+.lead-row.off { opacity: 0.42; }
+
+/* The time is meaningless until the reminder itself is on. */
+.time-row { transition: opacity 0.2s ease; }
+.time-row.off { opacity: 0.42; }
+.time-row.off .time-field { cursor: default; }
+.time-input:disabled { cursor: default; color: var(--text-2); }
+
+/* --- Update available --- */
+.update-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--mini-h) + 12px);
+  transform: translateX(-50%);
+  z-index: 55;
+  width: calc(100% - 32px);
+  max-width: 428px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px 11px 15px;
+  border-radius: 17px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow);
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-2);
+  animation: sheet-up 0.28s var(--tap);
+}
+.update-bar span { flex: 1; }
+.update-btn {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--grad-brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.update-x {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-3);
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
 
 /* --- Switch --- */
 .switch {
