@@ -24,6 +24,10 @@
   --tap: cubic-bezier(0.2, 0, 0.2, 1);
   --appbar-h: 52px;
   --tabbar-h: 60px;
+
+  /* Set by the player: 0 when nothing is loaded, so screens don't reserve
+     space for a mini bar that isn't there. */
+  --mini-h: 0px;
 }
 
 /* Dark (default) */
@@ -208,7 +212,7 @@ a { color: inherit; }
 .screen {
   flex: 1;
   padding: calc(var(--appbar-h) + env(safe-area-inset-top) + 8px) 16px
-           calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px);
+           calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--mini-h) + 24px);
 }
 
 /* Directional screen transitions: fade between tabs, slide when drilling in. */
@@ -239,7 +243,7 @@ a { color: inherit; }
   max-width: 460px;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--chrome);
   backdrop-filter: saturate(180%) blur(20px);
@@ -252,7 +256,7 @@ a { color: inherit; }
   position: absolute;
   top: 7px;
   left: 0;
-  width: 25%;
+  width: 20%;
   height: calc(var(--tabbar-h) - 14px);
   pointer-events: none;
   display: grid;
@@ -261,7 +265,7 @@ a { color: inherit; }
 }
 .tab-pill::before {
   content: "";
-  width: 56px;
+  width: 52px;
   height: 100%;
   border-radius: 14px;
   background: color-mix(in srgb, var(--brand) 15%, transparent);
@@ -322,6 +326,15 @@ a { color: inherit; }
   34% { transform: rotate(-18deg) translateY(-4px) scale(1.16); }
   68% { transform: rotate(11deg) translateY(-1px) scale(1.04); }
   100% { transform: rotate(0) translateY(-1px) scale(1); }
+}
+
+/* Music — the note swings like it's been struck */
+.tab.active[data-tab="music"] .tab-ico { animation: icoNote 0.62s cubic-bezier(0.34, 1.5, 0.5, 1); }
+@keyframes icoNote {
+  0% { transform: rotate(0) scale(1); }
+  30% { transform: rotate(-14deg) scale(1.2) translateY(-3px); }
+  62% { transform: rotate(9deg) scale(1.08) translateY(-1px); }
+  100% { transform: rotate(0) scale(1) translateY(-1px); }
 }
 
 /* Progress — the bars grow in, staggered */
@@ -479,36 +492,81 @@ a { color: inherit; }
   letter-spacing: 0.01em;
 }
 
-/* --- Week dots --- */
+/* --- Week strip --- */
 .week {
   display: flex;
   justify-content: space-between;
-  gap: 6px;
-  padding: 14px 12px;
+  gap: 4px;
+  padding: 12px 10px;
 }
-.week-day { flex: 1; text-align: center; }
-.week-day span {
+
+/* Scheduled days are buttons straight into that day's workout. */
+.week-day {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 2px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+}
+.week-day.tappable {
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.14s var(--tap);
+}
+.week-day.tappable:active { transform: scale(0.92); background: var(--surface-2); }
+
+.week-lab {
   display: block;
   font-size: 10.5px;
   font-weight: 600;
   color: var(--text-3);
-  margin-bottom: 7px;
 }
 .week-dot {
-  width: 30px;
-  height: 30px;
-  margin: 0 auto;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--surface-3);
-  color: var(--text-3);
   border: 1.5px solid transparent;
-  padding: 5px;
 }
-.week-dot.done { background: var(--mint); color: #04231A; }
-.week-dot.planned { border-color: var(--border-2); background: transparent; }
-.week-dot.today { border-color: var(--brand); color: var(--brand); }
+/* `color` is set inline to the workout's accent, so the icon, ring and wash
+   all key off the same value. */
+.week-dot.planned {
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.week-dot.done { background: var(--mint); color: #04231A; border-color: transparent; }
+.week-dot.rest { color: var(--text-3); }
+.week-dot.today {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--brand);
+}
+
+.section-head .hint {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Which weekday a category falls on this week */
+.row-when {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-3);
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.row.is-today .row-when { color: var(--brand); }
 
 /* --- List rows --- */
 .rows { overflow: hidden; }
@@ -1006,10 +1064,11 @@ a { color: inherit; }
 }
 .pal-card.on .pal-check { opacity: 1; transform: scale(1); }
 
-.pal-dots { display: flex; gap: 3px; }
+/* One dot per workout category, so the row scales with the accent count. */
+.pal-dots { display: flex; gap: 2.5px; }
 .pal-dots i {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   display: block;
 }
@@ -1178,7 +1237,8 @@ a { color: inherit; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px);
+  /* --mini-h keeps this clear of the music bar when one is showing. */
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--mini-h) + 12px);
   z-index: 45;
   width: calc(100% - 32px);
   max-width: 428px;
@@ -1212,6 +1272,638 @@ a { color: inherit; }
   place-items: center;
   cursor: pointer;
 }
+
+/* ============================================================
+   Music — mini bar, now-playing panel, playlist
+   ============================================================ */
+
+/* The root is inert scaffolding; only its children take pointer events, so
+   the app underneath stays usable while the mini bar floats over it. */
+.player-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.player-root > * { pointer-events: auto; }
+
+/* --- Mini bar --- */
+.mini {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px);
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 436px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px 0 8px;
+  border-radius: 17px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  overflow: hidden;
+  animation: sheet-up 0.3s var(--tap);
+  transition: opacity 0.22s ease, transform 0.28s var(--tap), visibility 0s;
+}
+/* visibility, not just opacity: a transparent bar would still be reachable by
+   keyboard and announced by a screen reader. Delaying it lets the fade finish
+   first. (The .np panel must never do this — it holds the live iframes.) */
+.player-root.mini-hidden .mini,
+.player-root.expanded .mini {
+  opacity: 0;
+  transform: translateX(-50%) translateY(14px);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.22s ease, transform 0.28s var(--tap), visibility 0s linear 0.22s;
+}
+
+.mini-art {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+}
+.mini-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.mini-meta { flex: 1; min-width: 0; display: block; }
+.mini-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 640;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-btn {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s var(--tap);
+}
+.mini-btn:active { transform: scale(0.88); background: var(--surface-3); }
+
+/* Hairline progress along the bottom edge of the bar */
+.mini-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.5px;
+  background: var(--border);
+}
+.mini-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--grad-brand);
+  transition: width 0.25s linear;
+}
+
+/* --- Now-playing panel --- */
+.np {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  max-width: 460px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  transform: translate(-50%, 100%);
+  transition: transform 0.4s cubic-bezier(0.32, 0.9, 0.3, 1);
+}
+.player-root.expanded .np { transform: translate(-50%, 0); }
+body.np-open { overflow: hidden; }
+
+.np::before {
+  /* Wash of the current brand colour so the panel reads as its own place. */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 55%;
+  background: radial-gradient(90% 70% at 50% 0%, color-mix(in srgb, var(--brand) 26%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.np-head {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  height: calc(var(--appbar-h) + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.np-head-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.np-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px calc(28px + env(safe-area-inset-bottom));
+}
+
+/* Media stage. Every source keeps its own slot mounted at all times — hiding
+   one with `display:none` would tear down its iframe and kill the audio. */
+.np-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: #000;
+  box-shadow: var(--shadow);
+}
+.np-slot {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.np-slot > *,
+.np-slot iframe { width: 100%; height: 100%; border: 0; display: block; }
+.np-stage[data-kind="youtube"] .np-slot[data-slot="youtube"],
+.np-stage[data-kind="spotify"] .np-slot[data-slot="spotify"],
+.np-stage[data-kind="soundcloud"] .np-slot[data-slot="soundcloud"],
+.np-stage[data-kind="audio"] .np-slot[data-slot="audio"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Clipped rather than display:none — an unrendered iframe can't report back. */
+.np-probe {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.np-probe iframe { width: 200px; height: 120px; border: 0; }
+
+.np-artwork {
+  display: grid;
+  place-items: center;
+  background: var(--grad-brand);
+}
+.np-artwork img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art-glyph { display: grid; place-items: center; color: #fff; }
+.np-artwork .art-glyph { color: rgba(255, 255, 255, 0.92); }
+.np-artwork .art-glyph .icon { width: 46px; height: 46px; }
+
+.np-meta { margin-top: 20px; text-align: center; }
+.np-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.np-sub { font-size: 13.5px; color: var(--text-2); margin-top: 3px; }
+
+.np-error a {
+  display: inline-block;
+  margin-top: 4px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.np-error {
+  margin-top: 12px;
+  padding: 9px 13px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--coral) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--coral) 34%, transparent);
+  color: var(--coral);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* --- Scrubber --- */
+.scrub { margin-top: 18px; cursor: pointer; touch-action: none; }
+.scrub:focus-visible { outline: 2px solid var(--brand); outline-offset: 6px; border-radius: 6px; }
+.scrub-track {
+  position: relative;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+.scrub-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: var(--grad-brand);
+  transition: width 0.2s linear;
+}
+.scrub-knob {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--brand);
+  transform: translateY(-50%);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 60%, transparent);
+  transition: left 0.2s linear;
+}
+.scrub-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* --- Transport --- */
+.np-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+.ctl {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.12s var(--tap), background 0.16s ease, color 0.16s ease;
+}
+.ctl:active { transform: scale(0.9); }
+.ctl.ghost { width: 40px; height: 40px; color: var(--text-3); }
+.ctl.ghost.on { color: var(--brand); background: color-mix(in srgb, var(--brand) 14%, transparent); }
+
+/* Repeat-one gets a dot so the two on-states are tellable apart. */
+.ctl.ghost.on[data-mode="one"] { position: relative; }
+.ctl.ghost.on[data-mode="one"]::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ctl.main {
+  width: 62px;
+  height: 62px;
+  background: var(--grad-brand);
+  color: #fff;
+  box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--brand) 80%, transparent);
+}
+.ctl.main .icon { width: 26px; height: 26px; }
+
+/* Shown while a track is being handed to its player. */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.2px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.7s linear infinite;
+}
+.ctl.main .spinner { width: 24px; height: 24px; border-width: 2.6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.np-queue { margin-top: 6px; }
+.q-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 13px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.q-row:last-child { border-bottom: none; }
+.q-row:active { background: var(--surface-2); }
+.q-art {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+}
+.q-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.q-body { flex: 1; min-width: 0; }
+.q-title,
+.q-sub {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.q-title { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
+.q-sub { font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
+
+/* --- Music screen --- */
+.music-hero { background: linear-gradient(135deg, var(--day-4, #B14DFF) 0%, var(--day-1, #FF4D6D) 100%); }
+
+.np-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.np-card-art {
+  width: 92px;
+  height: 92px;
+  flex: none;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--grad-brand);
+}
+.np-card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.np-card-art .art-glyph .icon { width: 34px; height: 34px; }
+
+.np-card-body { flex: 1; min-width: 0; }
+.np-card-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin-bottom: 3px;
+}
+.np-card .np-title { font-size: 16px; -webkit-line-clamp: 2; line-clamp: 2; }
+.np-card .np-sub { font-size: 12.5px; }
+.np-card .scrub { margin-top: 12px; }
+.np-card .scrub-times { font-size: 10.5px; margin-top: 5px; }
+
+.np-card-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 10px;
+}
+.np-card-controls .ctl { width: 38px; height: 38px; }
+.np-card-controls .ctl.ghost { width: 32px; height: 32px; }
+.np-card-controls .ctl.main { width: 46px; height: 46px; }
+.np-card-controls .ctl.main .icon { width: 21px; height: 21px; }
+
+.track-list { overflow: hidden; }
+.track-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.track-row:last-child { border-bottom: none; }
+.track-row.playing { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+
+.track-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px 11px 14px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.track-main:active { opacity: 0.6; }
+
+.track-art {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+}
+.track-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.track-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(8, 6, 20, 0.5);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.track-row.playing .track-play,
+.track-main:hover .track-play { opacity: 1; }
+
+.track-body { flex: 1; min-width: 0; }
+.track-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-row.playing .track-title { color: var(--brand); }
+.track-sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+
+.src-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 620;
+  color: var(--text-3);
+}
+.src-chip .icon { width: 13px; height: 13px; }
+.src-chip.warn { color: var(--coral); }
+
+/* The escape hatch on a track the platform won't play in an embed. */
+a.track-tool { text-decoration: none; color: var(--coral); }
+
+.track-tools { display: flex; align-items: center; gap: 2px; padding-right: 8px; }
+.track-tool {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s var(--tap);
+}
+.track-tool:active { transform: scale(0.85); background: var(--surface-3); }
+.track-tool[disabled] { opacity: 0.25; pointer-events: none; }
+/* The chevron points right by default — rotate it into a "move up" arrow. */
+.track-tool[data-music="up"] .icon { transform: rotate(-90deg); }
+
+/* --- Add-music sheet --- */
+.add-error {
+  margin: -4px 0 14px;
+  padding: 9px 13px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--coral) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--coral) 34%, transparent);
+  color: var(--coral);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.src-help {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.src-help-row { display: flex; gap: 11px; align-items: flex-start; }
+.src-help-icon { flex: none; margin-top: 1px; }
+.src-help-row strong { display: block; font-size: 13px; font-weight: 650; }
+.src-help-row span { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+
+/* --- Connect a streaming account --- */
+.connect-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px 15px;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.setup-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 12px;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.setup-steps strong { color: var(--text); font-weight: 640; }
+.mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  letter-spacing: -0.02em;
+}
+
+/* The redirect URI has to be pasted into Spotify's dashboard exactly. */
+.copy-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.copy-field .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.copy-field .icon { flex: none; color: var(--text-3); }
+.copy-field:active { transform: scale(0.99); }
+.copy-field.copied {
+  border-color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+}
+.copy-field.copied .icon { color: var(--mint); }
+
+/* --- Switch --- */
+.switch {
+  position: relative;
+  width: 50px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background 0.22s ease;
+}
+.switch.on { background: var(--grad-brand); }
+.switch > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.24s var(--tap);
+}
+.switch.on > span { transform: translateX(20px); }
 
 /* ============================================================
    Motion preferences
